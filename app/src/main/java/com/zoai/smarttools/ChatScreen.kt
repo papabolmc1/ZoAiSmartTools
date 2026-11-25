@@ -50,7 +50,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-private const val GEMINI_MODEL = "gemini-2.0-flash"
+private const val GEMINI_MODEL = "gemini-3.8-flash"
 private const val MAX_HISTORY = 20
 
 const val CHAT_SYSTEM = "You are ZoAi, a helpful and friendly AI assistant. Reply in the same language the user writes in (Hindi, Roman Hindi, Urdu or English). Be clear and concise, and use step-by-step answers when needed."
