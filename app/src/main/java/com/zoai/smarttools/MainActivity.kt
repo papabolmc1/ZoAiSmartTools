@@ -33,6 +33,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -81,10 +85,33 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                ZoAiHomeScreen(
-                    onToolClick = { /* navigation goes here */ },
-                    onSettingsClick = { }
-                )
+                var screen by remember { mutableStateOf("home") }
+                when (screen) {
+                    "chat" -> ChatScreen(
+                        title = "AI Chat",
+                        accent = NeonCyan,
+                        storageKey = "chat_history",
+                        systemPrompt = CHAT_SYSTEM,
+                        onBack = { screen = "home" }
+                    )
+                    "coding" -> ChatScreen(
+                        title = "AI Coding",
+                        accent = NeonGreen,
+                        storageKey = "coding_history",
+                        systemPrompt = CODING_SYSTEM,
+                        onBack = { screen = "home" }
+                    )
+                    else -> ZoAiHomeScreen(
+                        onToolClick = { type ->
+                            screen = when (type) {
+                                ToolType.CHAT -> "chat"
+                                ToolType.CODING -> "coding"
+                                else -> "home"
+                            }
+                        },
+                        onSettingsClick = { }
+                    )
+                }
             }
         }
     }
@@ -134,7 +161,6 @@ private fun Header(onSettingsClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Stand-in for the robot mascot; replace later with Image(painterResource(R.drawable.robot), ...)
             Icon(
                 imageVector = Icons.Filled.SmartToy,
                 contentDescription = null,
@@ -310,3 +336,4 @@ private fun Footer() {
         Spacer(modifier = Modifier.height(12.dp))
     }
 }
+++
