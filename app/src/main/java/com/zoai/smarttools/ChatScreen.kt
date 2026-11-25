@@ -50,7 +50,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-private const val CLAUDE_MODEL = "claude-haiku-5-5"
+private const val GEMINI_MODEL = "gemini-2.0-flash"
 private const val MAX_HISTORY = 20
 
 const val CHAT_SYSTEM = "You are ZoAi, a helpful and friendly AI assistant. Reply in the same language the user writes in (Hindi, Roman Hindi, Urdu or English). Be clear and concise, and use step-by-step answers when needed."
@@ -83,38 +83,41 @@ private fun saveHistory(prefs: SharedPreferences, key: String, msgs: List<ChatMe
     prefs.edit().putString(key, arr.toString()).apply()
 }
 
-suspend fun streamClaude(
+suspend fun streamGemini(
     apiKey: String,
     system: String,
     history: List<ChatMessage>,
     onDelta: suspend (String) -> Unit
 ) {
     withContext(Dispatchers.IO) {
-        val conn = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
+        val url = URL(
+            "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:streamGenerateContent?alt=sse"
+        )
+        val conn = url.openConnection() as HttpURLConnection
         try {
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
-            conn.setRequestProperty("x-api-key", apiKey)
-            conn.setRequestProperty("anthropic-version", "2023-06-01")
+            conn.setRequestProperty("x-goog-api-key", apiKey)
             conn.doOutput = true
             conn.connectTimeout = 15000
             conn.readTimeout = 120000
 
-            val msgs = JSONArray()
+            val contents = JSONArray()
             history.takeLast(MAX_HISTORY).dropWhile { !it.fromUser }.forEach { m ->
-                msgs.put(
+                contents.put(
                     JSONObject()
-                        .put("role", if (m.fromUser) "user" else "assistant")
-                        .put("content", m.text)
+                        .put("role", if (m.fromUser) "user" else "model")
+                        .put("parts", JSONArray().put(JSONObject().put("text", m.text)))
                 )
             }
 
             val body = JSONObject()
-                .put("model", CLAUDE_MODEL)
-                .put("max_tokens", 2000)
-                .put("stream", true)
-                .put("system", system)
-                .put("messages", msgs)
+                .put(
+                    "systemInstruction",
+                    JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system)))
+                )
+                .put("contents", contents)
+                .put("generationConfig", JSONObject().put("maxOutputTokens", 2000))
 
             conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
 
@@ -129,16 +132,14 @@ suspend fun streamClaude(
                     val line = reader.readLine() ?: break
                     if (!line.startsWith("data: ")) continue
                     val json = JSONObject(line.removePrefix("data: "))
-                    when (json.optString("type")) {
-                        "content_block_delta" -> {
-                            val delta = json.optJSONObject("delta")
-                            if (delta != null && delta.optString("type") == "text_delta") {
-                                onDelta(delta.optString("text"))
-                            }
-                        }
-                        "error" -> throw IllegalStateException(
-                            json.optJSONObject("error")?.optString("message") ?: "stream error"
-                        )
+                    val candidates = json.optJSONArray("candidates") ?: continue
+                    if (candidates.length() == 0) continue
+                    val parts = candidates.getJSONObject(0)
+                        .optJSONObject("content")
+                        ?.optJSONArray("parts") ?: continue
+                    for (i in 0 until parts.length()) {
+                        val text = parts.getJSONObject(i).optString("text")
+                        if (text.isNotEmpty()) onDelta(text)
                     }
                 }
             }
@@ -192,7 +193,7 @@ fun ChatScreen(
             val sb = StringBuilder()
             try {
                 val history = messages.subList(0, replyIndex).toList()
-                streamClaude(apiKey.trim(), systemPrompt, history) { delta ->
+                streamGemini(apiKey.trim(), systemPrompt, history) { delta ->
                     withContext(Dispatchers.Main) {
                         sb.append(delta)
                         if (replyIndex <= messages.lastIndex) {
@@ -253,7 +254,7 @@ fun ChatScreen(
                 apiKey = it
                 prefs.edit().putString("api_key", it).apply()
             },
-            label = { Text("Anthropic API key") },
+            label = { Text("Gemini API key") },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth()
